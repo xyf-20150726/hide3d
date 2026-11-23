@@ -1,0 +1,1861 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>惊魂躲猫猫 3D · 联机版</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0f1115; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; color: #fff; user-select: none; }
+  canvas { display: block; }
+
+  /* ===== 通用 HUD ===== */
+  .hud { position: fixed; z-index: 10; text-shadow: 0 1px 3px rgba(0,0,0,.85); pointer-events: none; }
+
+  #topbar { top: 14px; left: 50%; transform: translateX(-50%); text-align: center; }
+  #timer { font-size: 30px; font-weight: 800; letter-spacing: 1px; }
+  #phase-text { font-size: 13px; opacity: .9; margin-top: 2px; }
+
+  #left-panel { top: 14px; left: 14px; font-size: 14px; line-height: 1.85; }
+  .row-label { font-size: 12px; opacity: .75; }
+  .bar { width: 170px; height: 9px; background: rgba(255,255,255,.16); border-radius: 5px; overflow: hidden; margin: 2px 0 6px; }
+  .bar > i { display: block; height: 100%; width: 0%; transition: width .12s linear; }
+  #energy-bar > i { background: linear-gradient(90deg,#e74c3c,#ff8a65); }
+  #bullet-bar > i { background: linear-gradient(90deg,#3498db,#7fd3ff); }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 12px; background: rgba(255,255,255,.14); }
+
+  #right-panel { top: 14px; right: 14px; text-align: right; font-size: 13px; line-height: 1.8; }
+  #alive-hide { color: #ff8a80; font-weight: 700; }
+  #alive-hunt { color: #82c9ff; font-weight: 700; }
+
+  #event-feed { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 11; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+  .event-line { background: rgba(0,0,0,.62); padding: 6px 16px; border-radius: 8px; font-size: 13px; animation: evIn .25s ease; }
+  .event-line.good { border-left: 3px solid #2ecc71; }
+  .event-line.warn { border-left: 3px solid #f1c40f; }
+  .event-line.danger { border-left: 3px solid #e74c3c; }
+  .event-line.info { border-left: 3px solid #7f8c8d; }
+  @keyframes evIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  #key-hint { bottom: 14px; left: 50%; transform: translateX(-50%); font-size: 13px; background: rgba(0,0,0,.5); padding: 8px 18px; border-radius: 9px; white-space: nowrap; }
+
+  #crosshair { position: fixed; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; z-index: 9; pointer-events: none; display: none; }
+  #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(255,255,255,.85); }
+  #crosshair::before { left: 7px; top: 0; width: 2px; height: 16px; }
+  #crosshair::after { top: 7px; left: 0; height: 2px; width: 16px; }
+
+  /* ===== 全屏面板 ===== */
+  .screen { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 30%, rgba(40,46,58,.96), rgba(10,12,16,.98)); backdrop-filter: blur(3px); }
+  #open-hint {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: 150px; display: none; z-index: 30;
+    padding: 6px 14px; border-radius: 8px;
+    background: rgba(20, 24, 30, .82); border: 1px solid rgba(255, 209, 102, .55);
+    color: #ffd166; font-size: 14px; letter-spacing: 1px;
+    pointer-events: none; white-space: nowrap;
+  }
+  .screen.hide { display: none !important; }
+
+  h1 { font-size: 38px; letter-spacing: 6px; margin-bottom: 6px; }
+  .sub { font-size: 13px; color: #9aa4b2; margin-bottom: 26px; letter-spacing: 1px; }
+
+  .panel { width: 460px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); border-radius: 14px; padding: 22px 26px; }
+  #join-screen .panel { width: 520px; }
+  .field { display: flex; align-items: center; margin-bottom: 14px; }
+  .field label { width: 84px; font-size: 13px; color: #aeb6c2; flex: none; }
+  .field input { flex: 1; padding: 9px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.16); background: rgba(0,0,0,.35); color: #fff; font-size: 14px; outline: none; }
+  .field input:focus { border-color: #e74c3c; }
+
+  .seg { display: flex; gap: 8px; flex: 1; }
+  .seg button { flex: 1; padding: 9px 0; font-size: 13px; border-radius: 8px; border: 1px solid rgba(255,255,255,.16); background: rgba(0,0,0,.25); color: #cfd6df; cursor: pointer; transition: .15s; }
+  .seg button.on { background: #e74c3c; border-color: #e74c3c; color: #fff; font-weight: 700; }
+
+  .big-btn { width: 100%; margin-top: 6px; padding: 13px 0; font-size: 17px; font-weight: 700; border: none; border-radius: 10px; cursor: pointer;
+    background: linear-gradient(135deg,#e74c3c,#b02b1f); color: #fff; letter-spacing: 2px; transition: .18s; }
+  .big-btn:hover { filter: brightness(1.14); }
+  .big-btn.ghost { background: rgba(255,255,255,.1); color: #dfe4ea; font-weight: 500; letter-spacing: 1px; margin-top: 10px; }
+
+  .tip { margin-top: 18px; font-size: 12px; line-height: 1.9; color: #8b95a3; text-align: center; }
+
+  /* 房间列表 */
+  .rooms-head { display: flex; align-items: center; justify-content: space-between; margin: 6px 0 8px;
+    font-size: 12px; color: #aeb6c2; letter-spacing: 1px; }
+  .mini { padding: 3px 10px; font-size: 11px; border-radius: 6px; border: 1px solid rgba(255,255,255,.18);
+    background: rgba(0,0,0,.3); color: #cfd6df; cursor: pointer; }
+  .mini:hover { border-color: #e74c3c; color: #fff; }
+  .room-list { max-height: 158px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+  .room-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px;
+    background: rgba(255,255,255,.05); border: 1px solid transparent; font-size: 13px; }
+  .room-row:hover { border-color: rgba(231,76,60,.5); }
+  .room-row .code { flex: 1; font-weight: 700; letter-spacing: 1px; color: #ffe08a; }
+  .room-row .meta { font-size: 11px; color: #9aa4b2; }
+  .room-row .st { font-size: 11px; padding: 2px 7px; border-radius: 5px; }
+  .room-row .st.lobby { background: rgba(46,204,113,.22); color: #7be0a4; }
+  .room-row .st.play { background: rgba(231,76,60,.22); color: #ff8a80; }
+  .room-row .go { padding: 4px 10px; font-size: 12px; border-radius: 6px; border: none;
+    background: #e74c3c; color: #fff; cursor: pointer; }
+  .room-row .go[disabled] { background: rgba(255,255,255,.14); color: #8b95a3; cursor: default; }
+  .room-empty { font-size: 12px; color: #7c8794; padding: 10px 4px; text-align: center; }
+
+  /* 大厅 */
+  #lobby-screen .panel { width: 520px; }
+  .lobby-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; font-size: 13px; color: #aeb6c2; }
+  #room-code { font-weight: 700; color: #ffd166; letter-spacing: 2px; }
+  #player-list { display: flex; flex-direction: column; gap: 7px; max-height: 250px; overflow-y: auto; margin-bottom: 16px; }
+  .p-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: rgba(255,255,255,.05); border-radius: 8px; font-size: 14px; }
+  .p-row .dot { width: 8px; height: 8px; border-radius: 50%; background: #7f8c8d; flex: none; }
+  .p-row .nm { flex: 1; }
+  .p-row .badge { font-size: 11px; padding: 2px 8px; border-radius: 5px; background: rgba(255,255,255,.13); color: #cfd6df; }
+  .p-row .badge.host { background: #ffd166; color: #3a2c00; font-weight: 700; }
+  .p-row .badge.hide { background: rgba(231,76,60,.28); color: #ff8a80; }
+  .p-row .badge.hunt { background: rgba(52,152,219,.28); color: #82c9ff; }
+
+  #dead-screen { background: rgba(0,0,0,.55); }
+  #dead-screen .panel { width: 380px; text-align: center; }
+  #dead-title { font-size: 26px; margin-bottom: 10px; color: #ff8a80; }
+  #dead-screen p { font-size: 13px; color: #b9c1cc; line-height: 1.8; margin-bottom: 16px; }
+
+  /* 选伪装模型 */
+  #model-picker { position: fixed; left: 50%; bottom: 66px; transform: translateX(-50%); display: none; gap: 8px; z-index: 12; flex-wrap: wrap; justify-content: center; max-width: 94vw; }
+  #model-picker .m { width: 74px; padding: 8px 0 6px; text-align: center; border-radius: 9px; background: rgba(0,0,0,.6); border: 2px solid rgba(255,255,255,.14); cursor: pointer; font-size: 11px; }
+  #model-picker .m.on { border-color: #e74c3c; background: rgba(231,76,60,.25); }
+  #model-picker .m b { display: block; font-size: 15px; margin-bottom: 2px; }
+
+  #lock-hint { position: fixed; inset: 0; z-index: 14; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.42); font-size: 18px; letter-spacing: 2px; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<!-- HUD -->
+<div id="topbar" class="hud" style="display:none">
+  <div id="timer">--</div>
+  <div id="phase-text"></div>
+</div>
+
+<div id="left-panel" class="hud" style="display:none">
+  <div id="team-label"><span class="tag">-</span></div>
+  <div id="energy-wrap" style="display:none">
+    <div class="row-label">能量 <span id="energy-num">0</span>/100</div>
+    <div class="bar" id="energy-bar"><i></i></div>
+  </div>
+  <div id="cd-label" style="font-size:12px;color:#9aa4b2;line-height:1.7"></div>
+  <div id="bullet-wrap" style="display:none">
+    <div class="row-label">子弹 <span id="bullet-num">0</span>/3</div>
+    <div class="bar" id="bullet-bar"><i></i></div>
+  </div>
+  <div id="shield-label" style="font-size:12px;color:#ffd166"></div>
+</div>
+
+<div id="right-panel" class="hud" style="display:none">
+  <div>异常生物存活 <span id="alive-hide">0</span></div>
+  <div>调查员存活 <span id="alive-hunt">0</span></div>
+</div>
+
+<div id="event-feed"></div>
+<div id="key-hint" class="hud" style="display:none"></div>
+<div id="open-hint">按 G 打开柜子</div>
+<div id="crosshair"></div>
+<div id="model-picker"></div>
+<div id="lock-hint">点击画面锁定鼠标 · Esc 释放</div>
+
+<!-- 进入界面 -->
+<div id="join-screen" class="screen">
+  <h1>惊魂躲猫猫</h1>
+  <div class="sub">3D 联机版 · 10 个房间的地图 · 2v2 / 3v3 / 4v4</div>
+  <div class="panel">
+    <div class="field"><label>昵称</label><input id="in-name" maxlength="12" placeholder="输入你的名字"></div>
+    <div class="field"><label>房间号</label><input id="in-room" maxlength="12" placeholder="default（同一房间号一起玩）"></div>
+    <div class="field"><label>阵营</label>      <div class="seg" id="pref-seg">
+        <button data-pref="hide" class="on">异常生物</button>
+        <button data-pref="random">随机</button>
+        <button data-pref="hunt">调查员</button>
+      </div>
+    </div>
+    <div class="field"><label>对局规模</label>
+      <div class="seg" id="size-seg">
+        <button data-size="2">2v2</button>
+        <button data-size="3">3v3</button>
+        <button data-size="4" class="on">4v4</button>
+      </div>
+    </div>
+    <div class="rooms-head"><span>公开房间</span><button class="mini" id="btn-refresh">刷新</button></div>
+    <div id="room-list" class="room-list"><div class="room-empty">正在获取房间…</div></div>
+    <div style="display:flex;gap:10px">
+      <button class="big-btn ghost" id="btn-newroom" style="margin-top:0;flex:1">+ 创建新房间</button>
+      <button class="big-btn" id="btn-connect" style="margin-top:0;flex:1.4">进入房间</button>
+    </div>
+    <div class="tip" id="join-tip">
+      好友联机：把房主启动服务后显示的局域网地址发给对方，用同一房间号即可。
+    </div>
+  </div>
+</div>
+
+<!-- 大厅 -->
+<div id="lobby-screen" class="screen hide">
+  <h1 style="font-size:26px;letter-spacing:3px;margin-bottom:4px">房间大厅</h1>
+  <div class="sub">房间号 <span id="room-code">-</span></div>
+  <div class="panel">
+    <div class="lobby-head"><span>玩家列表</span><span id="lobby-count">0 / 8</span></div>
+    <div id="player-list"></div>
+    <div class="field"><label>我的偏好</label>
+      <div class="seg" id="pref-seg2">
+        <button data-pref="hide" class="on">异常生物</button>
+        <button data-pref="random">随机</button>
+        <button data-pref="hunt">调查员</button>
+      </div>
+    </div>
+    <div class="field"><label>对局规模</label>
+      <div class="seg" id="size-seg2">
+        <button data-size="2">2v2</button>
+        <button data-size="3">3v3</button>
+        <button data-size="4" class="on">4v4</button>
+      </div>
+    </div>
+    <div class="field"><label>人机补位</label>
+      <div class="seg" id="fill-seg">
+        <button data-fill="0">关闭</button>
+        <button data-fill="2">每队 2 人</button>
+        <button data-fill="3">每队 3 人</button>
+        <button data-fill="4">每队 4 人</button>
+        <button data-fill="asym">1v4（只有你）</button>
+      </div>
+    </div>
+    <button class="big-btn" id="btn-start">开始游戏</button>
+    <div class="tip" id="lobby-tip">房主选择 2v2 / 3v3 / 4v4，点开始后自动分阵营，人数超出的观战。<br>开了人机补位时，一个人也能直接开一局。</div>
+  </div>
+</div>
+
+<!-- 被淘汰 -->
+<div id="dead-screen" class="screen hide">
+  <div class="panel">
+    <div id="dead-title">你被淘汰了</div>
+    <p id="dead-text"></p>
+    <button class="big-btn ghost" id="btn-spectate">继续观战</button>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+// ==================================================
+// 基础
+// ==================================================
+const ARENA_DEFAULT = 14;
+const PLAY_TIME = 150;   // 与服务端 PLAY_TIME 保持一致
+const PROP_TYPES = ['crate', 'barrel', 'bucket', 'cart', 'plant', 'chair', 'trash', 'tank'];
+const PROP_LABEL = { crate: '木箱', barrel: '铁桶', bucket: '水桶', cart: '推车', plant: '盆栽', chair: '木椅', trash: '垃圾桶', tank: '氧气瓶' };
+const PROP_SIZE = {
+  crate: { w: 1.0, d: 1.0, h: 1.0 },
+  barrel: { w: 0.9, d: 0.9, h: 1.2 },
+  bucket: { w: 0.8, d: 0.8, h: 0.8 },
+  cart: { w: 1.7, d: 1.0, h: 0.95 },
+  plant: { w: 0.8, d: 0.8, h: 1.1 },
+  chair: { w: 0.8, d: 0.8, h: 1.0 },
+  trash: { w: 0.7, d: 0.7, h: 1.0 },
+  tank: { w: 0.6, d: 0.6, h: 1.15 }
+};
+
+const canvas = document.getElementById('cv');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x14171c);
+scene.fog = new THREE.FogExp2(0x14171c, 0.016);
+
+const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.05, 120);
+camera.rotation.order = 'YXZ';
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// 灯光
+scene.add(new THREE.AmbientLight(0x9fb2c6, 1.05));
+const hemi = new THREE.HemisphereLight(0xc2d3e2, 0x2a3037, 1.15);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff0dd, 1.15);
+sun.position.set(16, 26, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -42; sun.shadow.camera.right = 42;
+sun.shadow.camera.top = 42; sun.shadow.camera.bottom = -42;
+sun.shadow.camera.far = 130;
+scene.add(sun);
+
+// 阴森氛围点光（按地图尺寸在 buildWorld 里铺）
+const lampGroup = new THREE.Group();
+scene.add(lampGroup);
+
+// ==================================================
+// 道具模型工厂（伪装 / 场景杂物共用）
+// ==================================================
+const M = {
+  crate: new THREE.MeshStandardMaterial({ color: 0x9b7b52, roughness: 0.95 }),
+  crateDark: new THREE.MeshStandardMaterial({ color: 0x7d6141, roughness: 0.95 }),
+  metal: new THREE.MeshStandardMaterial({ color: 0x6d7a86, roughness: 0.55, metalness: 0.55 }),
+  barrel: new THREE.MeshStandardMaterial({ color: 0x4f5c63, roughness: 0.7, metalness: 0.35 }),
+  bucket: new THREE.MeshStandardMaterial({ color: 0x9aa8b0, roughness: 0.5, metalness: 0.25 }),
+  cart: new THREE.MeshStandardMaterial({ color: 0x6b7a8f, roughness: 0.6, metalness: 0.45 }),
+  wheel: new THREE.MeshStandardMaterial({ color: 0x2b2f34, roughness: 0.9 }),
+  pot: new THREE.MeshStandardMaterial({ color: 0x8d6a4e, roughness: 0.9 }),
+  leaf: new THREE.MeshStandardMaterial({ color: 0x3f7a4d, roughness: 0.85 }),
+  trashMat: new THREE.MeshStandardMaterial({ color: 0x4a5670, roughness: 0.6, metalness: 0.4 }),
+  tankMat: new THREE.MeshStandardMaterial({ color: 0xb9c2c9, roughness: 0.45, metalness: 0.65 })
+};
+
+function buildProp(type) {
+  const g = new THREE.Group();
+  if (type === 'crate') {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.0, 1.0), M.crate);
+    b.position.y = 0.5; g.add(b);
+    // 木条装饰
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.12, 1.04), M.crateDark);
+    strip.position.y = 0.5; g.add(strip);
+  } else if (type === 'barrel') {
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 1.2, 18), M.barrel);
+    b.position.y = 0.6; g.add(b);
+    for (const y of [0.35, 0.85]) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.035, 8, 20), M.metal);
+      ring.rotation.x = Math.PI / 2; ring.position.y = y; g.add(ring);
+    }
+  } else if (type === 'bucket') {
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.40, 0.31, 0.8, 18), M.bucket);
+    b.position.y = 0.4; g.add(b);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.40, 0.03, 8, 20), M.metal);
+    rim.rotation.x = Math.PI / 2; rim.position.y = 0.8; g.add(rim);
+    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.022, 6, 18, Math.PI), M.metal);
+    handle.position.y = 0.8; g.add(handle);
+  } else if (type === 'cart') {
+    // 推车：台面 + 四条腿 + 轮子 + 把手
+    const top = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.14, 1.0), M.cart);
+    top.position.y = 0.86; g.add(top);
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.3, 0.06), M.cart);
+    rail.position.set(0, 1.06, -0.47); g.add(rail);
+    for (const sx of [-0.68, 0.68]) {
+      for (const sz of [-0.36, 0.36]) {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.8, 8), M.metal);
+        leg.position.set(sx, 0.42, sz); g.add(leg);
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.07, 12), M.wheel);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(sx, 0.11, sz); g.add(wheel);
+      }
+    }
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.0, 8), M.metal);
+    handle.rotation.x = Math.PI / 2;
+    handle.position.set(0, 1.32, -0.52); g.add(handle);
+    for (const sx of [-0.55, 0.55]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.5, 8), M.metal);
+      post.position.set(sx, 1.06, -0.48); g.add(post);
+    }
+  } else if (type === 'plant') {
+    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.3, 0.55, 14), M.pot);
+    pot.position.y = 0.27; g.add(pot);
+    for (let i = 0; i < 5; i++) {
+      const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.27, 8, 6), M.leaf);
+      const a = i * Math.PI * 0.4;
+      leaf.position.set(Math.cos(a) * 0.24, 0.75 + Math.random() * 0.2, Math.sin(a) * 0.24);
+      leaf.scale.set(1, 0.7, 1.3);
+      g.add(leaf);
+    }
+  } else if (type === 'chair') {
+    // 木椅：座面 + 靠背 + 四条腿
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.1, 0.7), M.crate);
+    seat.position.y = 0.52; g.add(seat);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.5, 0.08), M.crateDark);
+    back.position.set(0, 0.78, -0.31); g.add(back);
+    for (const sx of [-0.3, 0.3]) {
+      for (const sz of [-0.3, 0.3]) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.52, 0.08), M.crateDark);
+        leg.position.set(sx, 0.26, sz); g.add(leg);
+      }
+    }
+  } else if (type === 'trash') {
+    // 垃圾桶：桶身 + 桶盖 + 脚踏
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.26, 0.9, 16), M.trashMat);
+    body.position.y = 0.45; g.add(body);
+    const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.1, 16), M.metal);
+    lid.position.y = 0.95; g.add(lid);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.03, 8, 18), M.metal);
+    rim.rotation.x = Math.PI / 2; rim.position.y = 0.9; g.add(rim);
+  } else if (type === 'tank') {
+    // 氧气瓶：圆柱瓶身 + 顶阀 + 底座
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.27, 1.0, 16), M.tankMat);
+    body.position.y = 0.56; g.add(body);
+    const top = new THREE.Mesh(new THREE.SphereGeometry(0.27, 14, 10), M.tankMat);
+    top.position.y = 1.06; top.scale.set(1, 0.7, 1); g.add(top);
+    const valve = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.16, 10), M.metal);
+    valve.position.y = 1.22; g.add(valve);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.08, 16), M.metal);
+    base.position.y = 0.06; g.add(base);
+  }
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return g;
+}
+
+// 玩家（未伪装）模型：蛋仔造型（蛋形身体、大眼、腮红、小手小脚），+Z 为正前方
+function buildPlayer(color) {
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.42, metalness: 0.04 });
+  const creamMat = new THREE.MeshStandardMaterial({ color: 0xfff4e2, roughness: 0.55 });
+  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.3 });
+  const pinkMat = new THREE.MeshStandardMaterial({ color: 0xff9bb3, roughness: 0.6 });
+
+  // 蛋形身体：球体上下拉伸，下宽上窄
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.5, 28, 22), bodyMat);
+  body.scale.set(0.9, 1.24, 0.9);
+  body.position.y = 0.62;
+  if (body.geometry.type === 'SphereGeometry') {
+    const pos = body.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const y = pos.getY(i) / 0.5;              // -1..1
+      const k = 1 - 0.13 * y;                   // 上窄下宽
+      pos.setX(i, pos.getX(i) * k);
+      pos.setZ(i, pos.getZ(i) * k);
+    }
+    pos.needsUpdate = true;
+    body.geometry.computeVertexNormals();
+  }
+  g.add(body);
+
+  // 浅色肚皮
+  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.5, 20, 16), creamMat);
+  belly.scale.set(0.52, 0.5, 0.3);
+  belly.position.set(0, 0.33, 0.31);
+  g.add(belly);
+
+  // 眼睛：白眼球 + 黑瞳孔 + 高光
+  for (const sx of [-0.175, 0.175]) {
+    const eyeW = new THREE.Mesh(new THREE.SphereGeometry(0.112, 18, 14), whiteMat);
+    eyeW.scale.set(1, 1.12, 0.62);
+    eyeW.position.set(sx, 0.87, 0.385);
+    g.add(eyeW);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 12), darkMat);
+    pupil.scale.set(1, 1.05, 0.5);
+    pupil.position.set(sx, 0.855, 0.448);
+    g.add(pupil);
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 8), whiteMat);
+    dot.position.set(sx + 0.022, 0.895, 0.487);
+    g.add(dot);
+  }
+
+  // 嘴巴
+  const mouth = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 10), darkMat);
+  mouth.scale.set(1.5, 0.55, 0.35);
+  mouth.position.set(0, 0.705, 0.45);
+  g.add(mouth);
+
+  // 腮红
+  for (const sx of [-0.31, 0.31]) {
+    const blush = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 10), pinkMat);
+    blush.scale.set(1, 0.6, 0.25);
+    blush.position.set(sx, 0.735, 0.34);
+    g.add(blush);
+  }
+
+  // 小手
+  for (const sx of [-0.5, 0.5]) {
+    const arm = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 12), bodyMat);
+    arm.scale.set(0.7, 1.05, 0.75);
+    arm.position.set(sx, 0.66, 0.02);
+    arm.rotation.z = sx > 0 ? -0.28 : 0.28;
+    g.add(arm);
+  }
+
+  // 小脚
+  for (const sx of [-0.17, 0.17]) {
+    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.15, 14, 12), creamMat);
+    foot.scale.set(1.05, 0.5, 1.4);
+    foot.position.set(sx, 0.075, 0.08);
+    g.add(foot);
+  }
+
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return g;
+}
+
+// 躲藏者本体：吃豆人（黄色球体、大嘴朝向 +Z、一只眼睛）
+function buildPacman() {
+  const g = new THREE.Group();
+  const tilt = new THREE.Group();          // 整体向后仰一点，第三人称从上往下能看到嘴
+  tilt.rotation.x = -0.42;
+  g.add(tilt);
+
+  const yellowMat = new THREE.MeshStandardMaterial({ color: 0xffd21e, roughness: 0.38, metalness: 0.05 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x141018, roughness: 0.5 });
+  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25 });
+
+  const open = Math.PI * 0.44;                 // 张嘴角度
+  const body = new THREE.Mesh(
+    new THREE.SphereGeometry(0.55, 40, 28, Math.PI / 2 + open / 2, Math.PI * 2 - open),
+    yellowMat
+  );
+  body.position.y = 0.6;
+  tilt.add(body);
+
+  // 嘴里的黑色空腔，看起来像真的张着嘴
+  const cavity = new THREE.Mesh(new THREE.SphereGeometry(0.42, 20, 16), darkMat);
+  cavity.position.set(0, 0.6, -0.02);
+  cavity.scale.set(1, 1, 0.72);
+  tilt.add(cavity);
+
+  // 眼睛
+  const eyeW = new THREE.Mesh(new THREE.SphereGeometry(0.15, 18, 14), whiteMat);
+  eyeW.position.set(0.17, 0.95, 0.2);
+  eyeW.scale.set(1, 0.9, 0.9);
+  tilt.add(eyeW);
+  const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.07, 14, 12), darkMat);
+  pupil.position.set(0.17, 0.98, 0.3);
+  tilt.add(pupil);
+
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return g;
+}
+
+// 自己（第三人称可见）：躲藏者能看到自己的伪装形态
+const selfRig = new THREE.Group();
+scene.add(selfRig);
+let selfModelKey = '';
+function updateSelfRig(t) {
+  const thirdPerson = me.team === 'hide' && me.alive && !spectating && myId !== null;
+  selfRig.visible = thirdPerson;
+  if (!thirdPerson) return;
+  const key = me.hiding ? 'prop:' + me.model : 'player';
+  if (key !== selfModelKey) {
+    selfModelKey = key;
+    while (selfRig.children.length) { selfRig.remove(selfRig.children[0]); }
+    selfRig.add(key.startsWith('prop:') ? buildProp(key.slice(5)) : buildPlayer(0xffd21e));
+  }
+  selfRig.position.set(me.pos.x, me.pos.y, me.pos.z);
+  selfRig.rotation.y = yaw + Math.PI;   // 模型正面是 +Z，镜头朝 -Z，需转 180°
+  // 扑咬过程中压扁+抖动，看起来像真的扑出去
+  const pt = myPounceAt ? (t - myPounceAt) / 600 : 1;
+  if (pt >= 0 && pt < 1) {
+    const s = Math.sin(pt * Math.PI);
+    selfRig.scale.set(1 + 0.15 * s, 1 - 0.3 * s, 1 + 0.35 * s);
+  } else {
+    selfRig.scale.set(1, 1, 1);
+  }
+}
+
+// 点是否被墙/道具占住（第三人称相机防穿墙）
+function blockedAt(x, z, r) {
+  const rr = r || 0.3;
+  for (const w of WALLS) {
+    if (Math.abs(x - w.x) < w.w / 2 + rr && Math.abs(z - w.z) < w.d / 2 + rr) return true;
+  }
+  return false;
+}
+
+// ==================================================
+// 世界构建
+// ==================================================
+let WALLS = [];
+let MAP = null;
+const worldGroup = new THREE.Group();
+scene.add(worldGroup);
+
+function clearWorld() {
+  while (worldGroup.children.length) {
+    const c = worldGroup.children.pop();
+    c.traverse?.(o => { if (o.isMesh) { o.geometry?.dispose?.(); } });
+  }
+}
+function clearWorldGroup(g) {
+  while (g.children.length) g.remove(g.children[0]);
+}
+
+const staticGroup = new THREE.Group();
+const dynamicGroup = new THREE.Group();
+scene.add(staticGroup, dynamicGroup);
+
+function buildWorld(map) {
+  WALLS = map.walls || [];
+
+  // 按场地大小铺氛围灯
+  while (lampGroup.children.length) lampGroup.remove(lampGroup.children[0]);
+  const A = map.arena;
+  const lampPos = [
+    // 8 个象限房间的中央
+    [-15.6, -11.25], [-6.9, -11.25], [15.6, -11.25], [6.9, -11.25],
+    [-15.6, 11.25], [-6.9, 11.25], [15.6, 11.25], [6.9, 11.25],
+    // 十字走廊：中央 + 东西端头 + 南北
+    [0, 0], [-18.2, 0], [18.2, 0], [0, -18.2], [0, 18.2]
+  ];
+  lampPos.forEach(([x, z], i) => {
+    const light = new THREE.PointLight(i === 8 ? 0xdfe8ff : (i % 2 ? 0xffb066 : 0x8fb4ff), 62, A * 1.1, 2);
+    light.position.set(x, 3.5, z);
+    lampGroup.add(light);
+  });
+
+  // 地面
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(map.arena * 2, map.arena * 2, 1, 1),
+    new THREE.MeshStandardMaterial({ color: 0x23272d, roughness: 1 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  staticGroup.add(ground);
+
+  // 天花板（避免上方是纯黑虚空）
+  const ceil = new THREE.Mesh(
+    new THREE.PlaneGeometry(map.arena * 2, map.arena * 2),
+    new THREE.MeshStandardMaterial({ color: 0x414a54, roughness: 1, side: THREE.BackSide, emissive: 0x141a20 })
+  );
+  ceil.rotation.x = Math.PI / 2;
+  ceil.position.y = 4.2;
+  staticGroup.add(ceil);
+
+  // 地砖网格
+  const grid = new THREE.GridHelper(map.arena * 2, map.arena * 2, 0x333a43, 0x2a3037);
+  grid.position.y = 0.012;
+  grid.material.opacity = 0.5;
+  grid.material.transparent = true;
+  staticGroup.add(grid);
+
+  // 墙面 / 柱子 / 道具
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x3d444c, roughness: 0.9 });
+  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x4a535c, roughness: 0.85 });
+
+  for (const w of WALLS) {
+    if (w.kind === 'prop') {
+      const g = buildProp(w.propType);
+      g.position.set(w.x, 0, w.z);
+      g.rotation.y = w.rot || 0;
+      staticGroup.add(g);
+    } else {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(w.w, w.h, w.d),
+        w.kind === 'pillar' ? pillarMat : wallMat
+      );
+      mesh.position.set(w.x, w.h / 2, w.z);
+      mesh.castShadow = mesh.receiveShadow = true;
+      staticGroup.add(mesh);
+      // 墙面细纹
+      if (w.kind === 'wall') {
+        const trim = new THREE.Mesh(
+          new THREE.BoxGeometry(w.w * 1.01, 0.12, w.d * 1.01),
+          new THREE.MeshStandardMaterial({ color: 0x2c3239 })
+        );
+        trim.position.set(w.x, w.h - 0.06, w.z);
+        staticGroup.add(trim);
+      }
+    }
+  }
+}
+
+// 道具（探测仪 / 护身符）
+const itemMeshes = new Map();
+function syncItems(items) {
+  const ids = new Set();
+  for (const it of items) {
+    ids.add(it.i);
+    let mesh = itemMeshes.get(it.i);
+    if (!mesh) {
+      const isDet = it.ty === 'detector';
+      mesh = new THREE.Mesh(
+        isDet ? new THREE.OctahedronGeometry(0.34, 0) : new THREE.TorusKnotGeometry(0.22, 0.075, 48, 8),
+        new THREE.MeshStandardMaterial({
+          color: isDet ? 0xffd54f : 0x4fc3f7,
+          emissive: isDet ? 0x6b5200 : 0x0b3950,
+          emissiveIntensity: 1.4, roughness: 0.35, metalness: 0.7
+        })
+      );
+      mesh.castShadow = true;
+      dynamicGroup.add(mesh);
+      itemMeshes.set(it.i, mesh);
+    }
+    mesh.position.set(it.x, 0.75, it.z);
+  }
+  for (const [id, mesh] of itemMeshes) {
+    if (!ids.has(id)) { dynamicGroup.remove(mesh); mesh.geometry.dispose(); itemMeshes.delete(id); }
+  }
+}
+
+// 柜子（道具藏在里面，调查员走近按 G 打开）
+function buildCabinet() {
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x6b7a86, roughness: 0.7, metalness: 0.35 });
+  const doorMat = new THREE.MeshStandardMaterial({ color: 0x8794a0, roughness: 0.6, metalness: 0.45 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.9, 0.62), bodyMat);
+  body.position.y = 0.95;
+  body.castShadow = true;
+  g.add(body);
+  for (const sx of [-0.275, 0.275]) {
+    const door = new THREE.Mesh(new THREE.BoxGeometry(0.52, 1.62, 0.07), doorMat);
+    door.position.set(sx, 0.95, 0.34);
+    g.add(door);
+    const handle = new THREE.Mesh(
+      new THREE.BoxGeometry(0.05, 0.22, 0.05),
+      new THREE.MeshStandardMaterial({ color: 0xd8dee3, roughness: 0.3, metalness: 0.8 })
+    );
+    handle.position.set(sx > 0 ? 0.11 : -0.11, 0.95, 0.4);
+    g.add(handle);
+  }
+  const top = new THREE.Mesh(
+    new THREE.BoxGeometry(1.16, 0.08, 0.68),
+    new THREE.MeshStandardMaterial({ color: 0x55626d, roughness: 0.8 })
+  );
+  top.position.y = 1.94;
+  g.add(top);
+  g.name = 'cabinet';
+  return g;
+}
+
+const cabMeshes = new Map();
+function syncCabinets(list) {
+  const ids = new Set();
+  for (const c of list) {
+    ids.add(c.i);
+    let m = cabMeshes.get(c.i);
+    if (!m) { m = buildCabinet(); dynamicGroup.add(m); cabMeshes.set(c.i, m); }
+    m.position.set(c.x, 0, c.z);
+    m.rotation.y = 0;
+  }
+  for (const [id, m] of cabMeshes) {
+    if (!ids.has(id)) { dynamicGroup.remove(m); cabMeshes.delete(id); }
+  }
+}
+
+function nearestCabinet() {
+  let best = null, bd = 2.4;
+  for (const c of stateRef.cabinets || []) {
+    const d = Math.hypot(me.pos.x - c.x, me.pos.z - c.z);
+    if (d < bd) { bd = d; best = c; }
+  }
+  return best;
+}
+
+// 最近的诱饵（看着也是柜子，调查员能按 G 搜）
+function nearestDecoy() {
+  let best = null, bd = 2.4;
+  for (const dcy of stateRef.decoys || []) {
+    const d = Math.hypot(me.pos.x - dcy[0], me.pos.z - dcy[1]);
+    if (d < bd) { bd = d; best = dcy; }
+  }
+  return best;
+}
+
+// 诱饵
+const decoyGroup = new THREE.Group();
+dynamicGroup.add(decoyGroup);
+function syncDecoys(list) {
+  // 诱饵变成"假柜子"：调查员打错就浪费一发子弹
+  while (decoyGroup.children.length > list.length) decoyGroup.remove(decoyGroup.children[0]);
+  for (let i = 0; i < list.length; i++) {
+    let m = decoyGroup.children[i];
+    if (!m) { m = buildCabinet(); decoyGroup.add(m); }
+    m.position.set(list[i][0], 0, list[i][1]);
+  }
+}
+
+// 远程玩家
+const remoteMap = new Map(); // id -> { group, modelKey, cur:Vector3, target:Vector3, ry }
+const ringGroup = new THREE.Group();
+scene.add(ringGroup);
+
+function makeRingEntity() {
+  const r = new THREE.Mesh(
+    new THREE.RingGeometry(0.42, 0.62, 24),
+    new THREE.MeshBasicMaterial({ color: 0xffd54f, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
+  );
+  r.rotation.x = -Math.PI / 2;
+  return r;
+}
+
+// ==================================================
+// 网络
+// ==================================================
+let ws = null;
+let myId = null;
+let myTeam = 'none';
+let myDead = false;
+let spectating = false;
+let connected = false;
+
+const net = {
+  send(obj) {
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+  }
+};
+
+const stateRef = {
+    phase: 'lobby', timer: 0, players: [], decoys: [], items: [], winner: null
+};
+
+// 自己的本地状态（客户端权威移动，服务端只记录位置做命中判定）
+const me = {
+  pos: new THREE.Vector3(0, 0, 0),
+  yaw: 0, pitch: 0,
+  alive: false, hiding: false, model: 'crate',
+  energy: 0, bullets: 0, shield: false, rage: false,
+  team: 'none', spectator: true,
+  tc: 0, dc: 0
+};
+
+let pendingJoin = null;
+
+function socketUrl() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${location.host || 'localhost:3000'}`;
+}
+
+// 打开长连接（只连接，不加入房间；用于拉房间列表）
+function ensureSocket() {
+  if (ws && (ws.readyState === 0 || ws.readyState === 1)) {
+    if (pendingJoin && ws.readyState === 1) { net.send(pendingJoin); pendingJoin = null; }
+    return;
+  }
+  try { ws = new WebSocket(socketUrl()); } catch (e) { setJoinTip('无法创建连接：' + e.message); return; }
+
+  ws.onopen = () => {
+    connected = true;
+    setJoinTip('已连接服务器');
+    if (pendingJoin) { net.send(pendingJoin); pendingJoin = null; }
+    requestRooms();
+  };
+  ws.onclose = () => {
+    connected = false;
+    setJoinTip('连接已断开，请刷新页面重试');
+  };
+  ws.onerror = () => {
+    setJoinTip('连接失败：请确认服务端已启动（node server.js），且是通过 http:// 地址打开页面');
+  };
+  ws.onmessage = (ev) => {
+    let m;
+    try { m = JSON.parse(ev.data); } catch { return; }
+    handleMessage(m);
+  };
+}
+
+function requestRooms() {
+  if (ws && ws.readyState === 1) net.send({ t: 'rooms' });
+}
+
+function connect() {
+  const name = (document.getElementById('in-name').value || '玩家').trim();
+  const room = (document.getElementById('in-room').value || 'default').trim();
+  const pref = currentPref();
+  setJoinTip('正在连接服务器…');
+  pendingJoin = { t: 'join', name, room, pref, size: currentSize() };
+  ensureSocket();
+}
+
+// 房间列表渲染
+function renderRoomList(list) {
+  const box = document.getElementById('room-list');
+  if (!list.length) {
+    box.innerHTML = '<div class="room-empty">暂时没有房间，点「创建新房间」开一局吧</div>';
+    return;
+  }
+  box.innerHTML = '';
+  const phaseText = { lobby: '等待中', prepare: '游戏中', playing: '游戏中', rage: '游戏中', end: '结算中' };
+  for (const r of list) {
+    const row = document.createElement('div');
+    row.className = 'room-row';
+    const playing = r.phase !== 'lobby' && r.phase !== 'end';
+    row.innerHTML = `
+      <span class="code">${escapeHtml(r.code)}</span>
+      <span class="meta">${r.humans} 人 · ${r.size || 4}v${r.size || 4}${r.fill > 0 ? ` · 补位` : ''}</span>
+      <span class="st ${playing ? 'play' : 'lobby'}">${phaseText[r.phase] || r.phase}</span>
+      <button class="go">${playing ? '观战' : '加入'}</button>
+    `;
+    const btn = row.querySelector('.go');
+    if (r.full) { btn.disabled = true; btn.textContent = '已满'; }
+    btn.onclick = () => {
+      if (document.getElementById('in-room')) document.getElementById('in-room').value = r.code;
+      connect();
+    };
+    box.appendChild(row);
+  }
+}
+
+// 定时刷新房间列表（仅在加入界面时）
+setInterval(() => {
+  const joinVisible = !document.getElementById('join-screen').classList.contains('hide');
+  if (!joinVisible) return;
+  ensureSocket();
+  requestRooms();
+}, 4000);
+
+let prefValue = 'hide';
+function currentPref() { return prefValue; }
+let sizeValue = 4;
+function currentSize() { return sizeValue; }
+
+function setJoinTip(text) {
+  const tip = document.getElementById('join-tip');
+  tip.innerHTML = text;
+}
+
+function handleMessage(m) {
+  switch (m.t) {
+    case 'joined': {
+      myId = m.id;
+      if (m.map) { MAP = m.map; buildWorld(m.map); }
+      document.getElementById('join-screen').classList.add('hide');
+      document.getElementById('lobby-screen').classList.remove('hide');
+      document.getElementById('room-code').textContent = m.code;
+      break;
+    }
+    case 'lobby': {
+      renderLobby(m);
+      break;
+    }
+    case 'you': {
+      myTeam = m.team;
+      myDead = false;
+      spectating = m.spectator === 1;
+      me.team = m.team;
+      me.spectator = spectating;
+      me.alive = !spectating;
+      if (m.team === 'hide') { me.hiding = true; me.energy = 0; me.bullets = 0; }
+      if (m.team === 'hunt') { me.hiding = false; me.bullets = 3; }
+      document.getElementById('lobby-screen').classList.add('hide');
+      document.getElementById('join-screen').classList.add('hide');
+      document.getElementById('dead-screen').classList.add('hide');
+      showHud(true);
+      requestLock();
+      break;
+    }
+    case 'init': {
+      // 玩家自己的出生位置由 state 同步
+      if (m.map && !MAP) { MAP = m.map; buildWorld(m.map); }
+      break;
+    }
+    case 'state': {
+      stateRef.phase = m.phase;
+      stateRef.timer = m.timer;
+      stateRef.players = m.players;
+      stateRef.items = m.items;
+      stateRef.cabinets = m.cabinets || [];
+      stateRef.decoys = m.decoys;
+      stateRef.winner = m.winner;
+      applyState(m);
+      break;
+    }
+    case 'event': {
+      pushEvent(m.text, m.kind);
+      break;
+    }
+    case 'dead': {
+      if (myId !== null && stateRef.players.find(p => p.i === myId && p.a === 0)) {
+        // 由 state 处理
+      }
+      showDead(m.by);
+      break;
+    }
+    case 'detector': {
+      detectorUntil = performance.now() + (m.ms || 4000);
+      pushEvent('探测仪启动：异常生物位置被标记', 'good');
+      break;
+    }
+    case 'end': {
+      showEnd(m.winner, m.text);
+      break;
+    }
+    case 'rooms': {
+      renderRoomList(m.list || []);
+      break;
+    }
+    case 'cd': {
+      if (m.taunt) pushEvent(`嘲讽冷却中，还需 ${(m.taunt / 1000).toFixed(1)} 秒`, 'warn');
+      if (m.decoy) pushEvent(`诱饵冷却中，还需 ${(m.decoy / 1000).toFixed(1)} 秒`, 'warn');
+      break;
+    }
+    case 'fx': {
+      // 扑咬动作：自己/别人都会有一个可见的冲刺动作
+      if (m.k === 'pounce') {
+        const now = performance.now();
+        if (m.i === myId) {
+          myPounceAt = now;
+          pushEvent('扑咬！冲出去了', 'danger');
+        } else {
+          const r = remoteMap.get(m.i);
+          if (r) r.pounceAt = now;
+        }
+      }
+      break;
+    }
+    case 'event_only': break;
+  }
+}
+
+function applyState(m) {
+  // 自己
+  if (myId !== null) {
+    const self = m.players.find(p => p.i === myId);
+    if (self) {
+      me.alive = self.a === 1;
+      me.hiding = self.hid === 1;
+      me.energy = self.en;
+      me.bullets = self.bu;
+      me.shield = self.sh === 1;
+      me.rage = self.rg === 1;
+      me.team = self.team;
+      me.tc = self.tc || 0;
+      me.dc = self.dc || 0;
+      if (self.m >= 0) me.model = PROP_TYPES[self.m];
+      if (!me.alive && !myDead) {
+        myDead = true;
+        showDead('unknown');
+      }
+      // 观战/刚出生时同步位置
+      if (!me.alive || me.spectator || firstFrameDone === false) {
+        me.pos.set(self.x, 0, self.z);        if (!firstFrameDone) {
+          // 开局朝向场地中心
+          const fx = -self.x, fz = -self.z;
+          const len = Math.hypot(fx, fz) || 1;
+          yaw = Math.atan2(-(fx / len), -(fz / len));
+          pitch = 0;
+        }
+        firstFrameDone = true;
+      } else {
+        // 服务端强制纠正（比如被墙推开）：距离过大就拉回
+        const dx = me.pos.x - self.x, dz = me.pos.z - self.z;
+        if (self.pb === 1 || Math.hypot(dx, dz) > 3) {
+          me.pos.x = self.x;
+          me.pos.z = self.z;
+        }
+      }
+      me.yaw = me.yaw; // 自己控制
+    }
+  }
+
+  // 远程
+  const seen = new Set();
+  for (const p of m.players) {
+    if (p.i === myId) continue;
+    if (p.inh === 1) {
+      // 准备阶段：调查员看不到躲藏者
+      const rr = remoteMap.get(p.i);
+      if (rr) rr.group.visible = false;
+      continue;
+    }
+    seen.add(p.i);
+    let r = remoteMap.get(p.i);
+    if (!r) {
+      r = {
+        group: new THREE.Group(),
+        modelKey: '',
+        cur: new THREE.Vector3(p.x, p.y || 0, p.z),
+        target: new THREE.Vector3(p.x, 0, p.z),
+        ry: p.ry,
+        team: p.team, name: p.n, alive: p.a === 1
+      };
+      dynamicGroup.add(r.group);
+      remoteMap.set(p.i, r);
+    }
+    r.group.visible = true;
+    r.target.set(p.x, p.y || 0, p.z);
+    r.ry = p.ry;
+    r.alive = p.a === 1;
+    r.team = p.team;
+    r.name = p.n;
+
+    const modelKey = !r.alive ? 'dead'
+      : p.team === 'hide' && p.hid === 1 ? 'prop:' + PROP_TYPES[p.m]
+      : 'player:' + p.team;
+
+    if (r.modelKey !== modelKey) {
+      r.modelKey = modelKey;
+      while (r.group.children.length) { r.group.remove(r.group.children[0]); }
+      if (modelKey === 'dead') {
+        // 淘汰后不显示
+      } else if (modelKey.startsWith('prop:')) {
+        r.group.add(buildProp(modelKey.slice(5)));
+      } else {
+        // 躲藏者未伪装时是吃豆人，调查员是蛋仔
+        r.group.add(buildPlayer(p.team === 'hide' ? 0xffd21e : 0x2f86d6));
+      }
+    }
+    // 护盾光圈
+    const hasRing = r.group.getObjectByName('shieldRing');
+    if (p.sh === 1 && !hasRing) {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.55, 0.05, 8, 24),
+        new THREE.MeshStandardMaterial({ color: 0xffd166, emissive: 0x7a5b00, emissiveIntensity: 1.2 })
+      );
+      ring.name = 'shieldRing';
+      ring.position.y = 0.5;
+      ring.rotation.x = Math.PI / 2;
+      r.group.add(ring);
+    } else if (p.sh !== 1 && hasRing) {
+      r.group.remove(hasRing);
+    }
+  }
+  for (const [id, r] of remoteMap) {
+    if (!seen.has(id)) { dynamicGroup.remove(r.group); remoteMap.delete(id); }
+  }
+
+  syncCabinets(m.cabinets || []);
+  syncDecoys(m.decoys || []);
+  updateHud();
+}
+
+// ==================================================
+// UI 逻辑
+// ==================================================
+function bindSeg(segId, cb) {
+  const seg = document.getElementById(segId);
+  seg.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    [...seg.querySelectorAll('button')].forEach(x => x.classList.toggle('on', x === b));
+    prefValue = b.dataset.pref;
+    if (segId === 'pref-seg2' && connected) net.send({ t: 'pref', pref: prefValue });
+    cb && cb(prefValue);
+  });
+}
+bindSeg('pref-seg');
+bindSeg('pref-seg2');
+
+// 对局规模：2v2 / 3v3 / 4v4
+function bindSizeSeg(segId) {
+  const seg = document.getElementById(segId);
+  seg.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const sz = Number(b.dataset.size);
+    sizeValue = sz;
+    document.querySelectorAll('#size-seg button, #size-seg2 button').forEach(x => {
+      x.classList.toggle('on', Number(x.dataset.size) === sz);
+    });
+    if (segId === 'size-seg2') {
+      if (!isHostNow()) { pushEvent('只有房主可以改对局规模', 'warn'); return; }
+      net.send({ t: 'size', n: sz, autoFill: true });
+    }
+  });
+}
+bindSizeSeg('size-seg');
+bindSizeSeg('size-seg2');
+
+document.getElementById('btn-connect').onclick = () => {
+  if (myId !== null) return;   // 已经进过房间
+  connect();
+};
+
+document.getElementById('btn-refresh').onclick = () => { ensureSocket(); requestRooms(); };
+
+document.getElementById('btn-newroom').onclick = () => {
+  if (myId !== null) return;
+  const rnd = Math.random().toString(36).slice(2, 6).toUpperCase();
+  document.getElementById('in-room').value = '房' + rnd;
+  connect();
+};
+
+// 页面一打开就连接服务器，拉取房间列表
+setTimeout(() => ensureSocket(), 150);
+
+// 人机补位选择（仅房主可改）
+document.getElementById('fill-seg').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (!isHostNow()) {
+    pushEvent('只有房主可以调整人机补位', 'warn');
+    return;
+  }
+  const v = b.dataset.fill;
+  if (v === 'asym') net.send({ t: 'fill', n: 4, mode: 'asym' });
+  else net.send({ t: 'fill', n: Number(v) });
+});
+let amHost = false;
+function isHostNow() { return amHost; }
+
+// 支持 URL 参数自动进入：?auto=1&name=xxx&room=yyy&pref=hide|hunt|random
+(function autoJoin() {
+  const q = new URLSearchParams(location.search);
+  if (q.get('auto') !== '1') return;
+  if (q.get('name')) document.getElementById('in-name').value = q.get('name');
+  if (q.get('room')) document.getElementById('in-room').value = q.get('room');
+  const pref = q.get('pref');
+  if (['hide', 'hunt', 'random'].includes(pref)) {
+    prefValue = pref;
+    ['pref-seg', 'pref-seg2'].forEach(segId => {
+      document.querySelectorAll(`#${segId} button`).forEach(b => b.classList.toggle('on', b.dataset.pref === pref));
+    });
+  }
+  const sz = Number(q.get('size'));
+  if (sz >= 2 && sz <= 4) {
+    sizeValue = sz;
+    document.querySelectorAll('#size-seg button, #size-seg2 button').forEach(b => {
+      b.classList.toggle('on', Number(b.dataset.size) === sz);
+    });
+  }
+  setTimeout(() => { if (!connected) connect(); }, 120);
+})();
+
+document.getElementById('btn-start').onclick = () => {
+  net.send({ t: 'start' });
+};
+
+function renderLobby(m) {
+  const size = Math.max(2, Math.min(4, Number(m.size) || 4));
+  sizeValue = size;
+  document.querySelectorAll('#size-seg button, #size-seg2 button').forEach(b => {
+    b.classList.toggle('on', Number(b.dataset.size) === size);
+  });
+  document.getElementById('room-code').textContent = m.code;
+  document.getElementById('lobby-count').textContent = `${m.players.length} / ${size * 2}`;
+  const list = document.getElementById('player-list');
+  list.innerHTML = '';
+  for (const p of m.players) {
+    const row = document.createElement('div');
+    row.className = 'p-row';
+    const prefLabel = p.pref === 'hide' ? '异常生物' : p.pref === 'hunt' ? '调查员' : '随机';
+    row.innerHTML = `
+      <span class="dot"></span>
+      <span class="nm">${escapeHtml(p.n)}</span>
+      <span class="badge ${p.pref}">${prefLabel}</span>
+      ${p.host ? '<span class="badge host">房主</span>' : ''}
+    `;
+    list.appendChild(row);
+  }
+  // 房主按钮状态
+  const isHost = m.players.some(p => p.i === myId && p.host === 1);
+  amHost = isHost;
+  const btn = document.getElementById('btn-start');
+  btn.disabled = !isHost;
+  btn.textContent = isHost ? '开始游戏' : '等待房主开始…';
+  btn.style.opacity = isHost ? '1' : '.55';
+  btn.style.cursor = isHost ? 'pointer' : 'default';
+
+  // 人机补位状态
+  const fill = Number.isFinite(m.fill) ? m.fill : size;
+  document.querySelectorAll('#fill-seg button').forEach(b => {
+    const on = b.dataset.fill === 'asym' ? !!m.asym : (!m.asym && Number(b.dataset.fill) === fill);
+    b.classList.toggle('on', on);
+    b.style.opacity = isHost ? '1' : '.55';
+    b.style.cursor = isHost ? 'pointer' : 'default';
+  });
+
+  // 提示补位情况
+  const humans = m.players.length;
+  const need = fill * 2 - humans;
+  const tip = document.getElementById('lobby-tip');
+  if (fill === 0) {
+    tip.innerHTML = `人机补位已关闭：需要凑够 ${size}v${size} 名真人才能开始。`;
+  } else if (m.asym) {
+    tip.innerHTML = `1v4 模式：你自己一个人在一边，对面补满 ${fill} 个 AI。<br>想当调查员就选「调查员」，想当躲藏者就选「躲藏者」。`;
+  } else {
+    tip.innerHTML = `本局 ${size}v${size}。当前 ${humans} 名真人，将补入 ${Math.max(0, need)} 个 AI。<br>一个人也能直接开一局。`;
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+let feedTimer = [];
+function pushEvent(text, kind) {
+  const feed = document.getElementById('event-feed');
+  const div = document.createElement('div');
+  div.className = 'event-line ' + (kind || 'info');
+  div.textContent = text;
+  feed.appendChild(div);
+  setTimeout(() => div.remove(), 4200);
+  while (feed.children.length > 5) feed.removeChild(feed.children[0]);
+}
+
+function showHud(on) {
+  for (const id of ['topbar', 'left-panel', 'right-panel', 'key-hint']) {
+    document.getElementById(id).style.display = on ? '' : 'none';
+  }
+}
+
+let phaseToast = '';
+let lastPhase = '';
+function updateHud() {
+  if (myId === null) return;
+  const t = stateRef.timer;
+  const phaseTextMap = {
+    prepare: '准备阶段 · 躲藏者潜伏中',
+    playing: '对局进行中',
+    rage: '狂暴模式 · 全速追击',
+    end: '对局结束',
+    lobby: '等待开始'
+  };
+  document.getElementById('timer').textContent = formatTime(t);
+  document.getElementById('phase-text').textContent =
+    stateRef.phase === 'rage'
+      ? (me.team === 'hunt' ? '狂暴模式 · 枪被压制，快跑！' : '狂暴模式 · 无限扑咬！')
+      : (phaseTextMap[stateRef.phase] || '');
+  document.getElementById('timer').style.color =
+    stateRef.phase === 'rage' ? '#ff6b5e' : t <= 30 && stateRef.phase === 'playing' ? '#ffd166' : '#fff';
+
+  // 阵营
+  const teamLabel = document.getElementById('team-label');
+  if (me.team === 'hide') teamLabel.innerHTML = '<span class="tag" style="background:rgba(231,76,60,.3);color:#ff8a80">异常生物</span>';
+  else if (me.team === 'hunt') teamLabel.innerHTML = '<span class="tag" style="background:rgba(52,152,219,.3);color:#82c9ff">调查员</span>';
+  else if (spectating) teamLabel.innerHTML = '<span class="tag">观战中</span>';
+
+  // 能量 / 子弹
+  const eWrap = document.getElementById('energy-wrap');
+  const bWrap = document.getElementById('bullet-wrap');
+  if (me.team === 'hide') {
+    eWrap.style.display = '';
+    bWrap.style.display = 'none';
+    document.getElementById('energy-num').textContent = me.rage ? '∞' : Math.floor(me.energy);
+    document.querySelector('#energy-bar > i').style.width = (me.rage ? 100 : me.energy) + '%';
+  } else if (me.team === 'hunt') {
+    eWrap.style.display = 'none';
+    bWrap.style.display = '';
+    document.getElementById('bullet-num').textContent = me.bullets;
+    document.querySelector('#bullet-bar > i').style.width = (me.bullets / 3 * 100) + '%';
+  } else {
+    eWrap.style.display = 'none';
+    bWrap.style.display = 'none';
+  }
+
+  document.getElementById('shield-label').textContent = me.shield ? '🛡 护身符已激活' : '';
+  if (me.hiding) document.getElementById('shield-label').textContent += (me.shield ? '  ' : '') + '（已伪装）';
+
+  const cd = document.getElementById('cd-label');
+  if (me.team === 'hide') {
+    cd.textContent =
+      `嘲讽 ${me.tc > 0 ? (me.tc / 1000).toFixed(1) + 's' : '就绪'} ｜ 诱饵 ${me.dc > 0 ? (me.dc / 1000).toFixed(1) + 's' : '就绪'}`;
+    cd.style.display = '';
+  } else {
+    cd.textContent = '';
+  }
+
+  // 存活人数
+  const players = stateRef.players || [];
+  document.getElementById('alive-hide').textContent = players.filter(p => p.team === 'hide' && p.a === 1).length;
+  document.getElementById('alive-hunt').textContent = players.filter(p => p.team === 'hunt' && p.a === 1).length;
+
+  // 按键提示
+  const hint = document.getElementById('key-hint');
+  if (me.team === 'hide') {
+    hint.textContent = 'WASD 移动 · 空格跳跃 · E 伪装/解除 · 1-8 换伪装 · T 嘲讽 · F 扑咬 · Q 放假柜子';
+  } else if (me.team === 'hunt') {
+    if (stateRef.phase === 'prepare') {
+      hint.textContent = `准备阶段：调查员锁定中，还有 ${Math.max(0, Math.ceil(t - PLAY_TIME))} 秒出动`;
+    } else {
+      hint.textContent = 'WASD 移动 · 空格跳跃 · 左键射击(3发·6秒回1发) · 走近柜子按 G 打开';
+    }
+  } else {
+    hint.textContent = '观战中 · Tab 切换视角';
+  }
+
+  const picker = document.getElementById('model-picker');
+  if (me.team === 'hide' && me.alive) picker.style.display = 'flex';
+  else picker.style.display = 'none';
+
+  document.getElementById('crosshair').style.display =
+    (pointerLocked && me.team === 'hunt' && me.alive) ? 'block' : 'none';
+}
+
+function formatTime(s) {
+  s = Math.max(0, Math.ceil(s));
+  const m = Math.floor(s / 60), r = s % 60;
+  return `${m}:${String(r).padStart(2, '0')}`;
+}
+
+function showDead(by) {
+  myDead = true;
+  document.exitPointerLock?.();
+  const title = document.getElementById('dead-title');
+  const text = document.getElementById('dead-text');
+  title.textContent = '你被淘汰了';
+  text.textContent = by === 'pounce'
+    ? '被异常生物扑咬淘汰，接下来可以观战队友。'
+    : by === 'shoot'
+      ? '被调查员识破伪装并击中，接下来可以观战队友。'
+      : '你已出局。';
+  document.getElementById('dead-screen').classList.remove('hide');
+  me.alive = false;
+}
+
+document.getElementById('btn-spectate').onclick = () => {
+  document.getElementById('dead-screen').classList.add('hide');
+  spectating = true;
+  requestLock();
+};
+
+function showEnd(winner, text) {
+  const screen = document.getElementById('join-screen');
+  // 用简单提示 + 回大厅
+  pushEvent((winner === 'hide' ? '异常生物胜利' : '调查员胜利') + ' · ' + text, winner === 'hide' ? 'danger' : 'good');
+  document.exitPointerLock?.();
+  setTimeout(() => {
+    document.getElementById('lobby-screen').classList.remove('hide');
+    showHud(false);
+    me.alive = false; me.team = 'none'; spectating = true;
+    myDead = false;
+    remoteMap.forEach(r => dynamicGroup.remove(r.group));
+    remoteMap.clear();
+  }, 3200);
+}
+
+// ==================================================
+// 输入
+// ==================================================
+const keys = Object.create(null);
+let pointerLocked = false;
+let yaw = 0, pitch = 0;
+let firstFrameDone = false;
+let detectorUntil = 0;
+
+function requestLock() {
+  if (pointerLocked) return;
+  canvas.requestPointerLock?.();
+}
+document.addEventListener('pointerlockchange', () => {
+  pointerLocked = document.pointerLockElement === canvas;
+  document.getElementById('lock-hint').style.display = pointerLocked ? 'none' : (myId !== null && !document.getElementById('lobby-screen').classList.contains('hide')) ? 'none' : 'flex';
+  updateHud();
+});
+canvas.addEventListener('click', () => { if (myId !== null && !spectating) requestLock(); });
+
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Escape') return;
+  if (e.code === 'Tab' || e.code === 'Space') e.preventDefault();
+
+  if (!me.alive && !spectating) return;
+
+  switch (e.code) {
+    case 'KeyE': if (me.team === 'hide') net.send({ t: 'hide' }); break;
+    case 'KeyT':
+      if (me.team === 'hide') {
+        if (me.tc > 0) { pushEvent(`嘲讽冷却中 ${(me.tc / 1000).toFixed(1)} 秒`, 'warn'); break; }
+        net.send({ t: 'taunt' });
+      }
+      break;
+    case 'KeyF': if (me.team === 'hide') { if (!me.rage && me.energy < 100) { pushEvent('能量还没满，先靠嘲讽/靠近调查员攒能量', 'warn'); break; } net.send({ t: 'pounce' }); } break;
+    case 'KeyG':
+      if (me.team === 'hunt') {
+        if (performance.now() - lastOpen < 600) break;
+        const c = nearestCabinet();
+        const dcy = nearestDecoy();
+        const dc = dcy ? Math.hypot(me.pos.x - dcy[0], me.pos.z - dcy[1]) : Infinity;
+        const cc = c ? Math.hypot(me.pos.x - c.x, me.pos.z - c.z) : Infinity;
+        if (dc < cc && dcy) {
+          lastOpen = performance.now();
+          net.send({ t: 'searchDecoy' });
+          break;
+        }
+        if (!c) { pushEvent('附近没有柜子', 'warn'); break; }
+        lastOpen = performance.now();
+        net.send({ t: 'openCab', id: c.i });
+      }
+      break;
+    case 'KeyQ':
+      if (me.team === 'hide') {
+        if (me.dc > 0) { pushEvent(`诱饵冷却中 ${(me.dc / 1000).toFixed(1)} 秒`, 'warn'); break; }
+        net.send({ t: 'decoy' });
+      }
+      break;
+    case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4':
+    case 'Digit5': case 'Digit6': case 'Digit7': case 'Digit8': {
+      if (me.team === 'hide') {
+        const idx = Number(e.code.slice(5)) - 1;
+        if (idx >= PROP_TYPES.length) break;
+        net.send({ t: 'model', m: idx });
+        if (!me.hiding) net.send({ t: 'hide' });
+        highlightPicker(idx);
+      }
+      break;
+    }
+  }
+});
+addEventListener('keyup', e => { keys[e.code] = false; if (e.code === 'Space') jumpHeld = false; });
+
+addEventListener('mousemove', e => {
+  if (!pointerLocked) return;
+  yaw -= e.movementX * 0.0022;
+  pitch -= e.movementY * 0.0022;
+  pitch = Math.max(-1.35, Math.min(1.35, pitch));
+});
+
+addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  if (!pointerLocked) { requestLock(); return; }
+  if (me.team === 'hunt' && me.alive) shoot();
+});
+
+// 伪装模型快捷选择条
+(function buildPicker() {
+  const picker = document.getElementById('model-picker');
+  PROP_TYPES.forEach((type, i) => {
+    const d = document.createElement('div');
+    d.className = 'm';
+    d.dataset.idx = i;
+    d.innerHTML = `<b>${PROP_LABEL[type]}</b>${i + 1}`;
+    d.onclick = () => {
+      net.send({ t: 'model', m: i });
+      if (!me.hiding) net.send({ t: 'hide' });
+      highlightPicker(i);
+    };
+    picker.appendChild(d);
+  });
+})();
+function highlightPicker(idx) {
+  document.querySelectorAll('#model-picker .m').forEach(el => {
+    el.classList.toggle('on', Number(el.dataset.idx) === idx);
+  });
+}
+
+// 射击
+const raycaster = new THREE.Raycaster();
+function shoot() {
+  if (stateRef.phase === 'rage') { pushEvent('狂暴阶段打不了枪了，快跑！', 'warn'); return; }
+  if (me.bullets <= 0) { pushEvent('没子弹了，等一下自动上膛', 'warn'); return; }
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  net.send({
+    t: 'shoot',
+    o: [+camera.position.x.toFixed(2), +camera.position.y.toFixed(2), +camera.position.z.toFixed(2)],
+    d: [+dir.x.toFixed(3), +dir.y.toFixed(3), +dir.z.toFixed(3)]
+  });
+  // 本地枪口闪光
+  muzzleFlash();
+}
+
+let flashMesh = null, flashUntil = 0;
+function muzzleFlash() {
+  if (!flashMesh) {
+    flashMesh = new THREE.PointLight(0xffcc66, 0, 8, 2);
+    camera.add(flashMesh);
+    flashMesh.position.set(0.18, -0.12, -0.6);
+    scene.add(camera);
+  }
+  flashUntil = performance.now() + 90;
+}
+
+// 调查员手持武器模型
+let gunGroup = null;
+function ensureGun() {
+  if (gunGroup) { gunGroup.visible = (me.team === 'hunt' && me.alive); return; }
+  gunGroup = new THREE.Group();
+  const dark = new THREE.MeshStandardMaterial({ color: 0x252a30, roughness: 0.55, metalness: 0.6 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.14, 0.42), dark);
+  body.position.set(0, 0, 0);
+  gunGroup.add(body);
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.26, 10), dark);
+  barrel.rotation.x = Math.PI / 2;
+  barrel.position.set(0, 0.01, -0.3);
+  gunGroup.add(barrel);
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.22, 0.09), dark);
+  grip.position.set(0, -0.16, 0.1);
+  grip.rotation.x = -0.18;
+  gunGroup.add(grip);
+  gunGroup.position.set(0.3, -0.28, -0.78);
+  gunGroup.rotation.y = -0.08;
+  gunGroup.rotation.x = 0.04;
+  gunGroup.scale.setScalar(0.82);
+  camera.add(gunGroup);
+  scene.add(camera);
+  gunGroup.visible = (me.team === 'hunt' && me.alive);
+}
+
+// ==================================================
+// 移动 + 碰撞
+// ==================================================
+const PLAYER_R = 0.42;
+const SPEED = 3.6;
+const SPEED_RAGE = 5.3;
+
+// 道具会被随机旋转，碰撞体要按旋转后的真实占地算
+function footprint(w, d, rot) {
+  if (!rot) return [w, d];
+  const c = Math.abs(Math.cos(rot)), s = Math.abs(Math.sin(rot));
+  return [w * c + d * s, w * s + d * c];
+}
+const CLIMB_ASSIST = 0.4;   // 跳到"离顶面 0.4 米以内"就自动抓住边缘
+
+// 所有能站上去的表面：[x, z, 半宽, 半深, 顶面高度]
+function standableTops() {
+  const out = [];
+  if (MAP && MAP.props) {
+    for (const p of MAP.props) {
+      if (p.kind !== 'prop') continue;
+      const [fw, fd] = footprint(p.w, p.d, p.rot);
+      out.push([p.x, p.z, fw / 2, fd / 2, p.h || 1]);
+    }
+  }
+  for (const c of stateRef.cabinets || []) out.push([c.x, c.z, 0.56, 0.32, 1.9]);
+  // 诱饵看着也是柜子，一样能站上去
+  for (const dcy of stateRef.decoys || []) out.push([dcy[0], dcy[1], 0.56, 0.32, 1.9]);
+  return out;
+}
+
+// 站到道具上面：算脚下的"地面高度"
+function groundAt(x, z, y) {
+  let g = 0;
+  for (const [tx, tz, hw, hd, top] of standableTops()) {
+    if (top > y + 0.06) continue;
+    if (Math.abs(x - tx) <= hw + 0.02 && Math.abs(z - tz) <= hd + 0.02 && top > g) g = top;
+  }
+  return g;
+}
+
+// 从盒子里把玩家推出去（standY 足够高就跳过，允许站在上面）
+function pushOutBox(pos, w, d, cx, cz, standY) {
+  const hx = w / 2, hz = d / 2;
+  const minx = cx - hx, maxx = cx + hx;
+  const minz = cz - hz, maxz = cz + hz;
+  if (pos.x > minx - PLAYER_R && pos.x < maxx + PLAYER_R &&
+      pos.z > minz - PLAYER_R && pos.z < maxz + PLAYER_R) {
+    const px = Math.min(maxx, Math.max(minx, pos.x));
+    const pz = Math.min(maxz, Math.max(minz, pos.z));
+    let dx = pos.x - px, dz = pos.z - pz;
+    const d2 = dx * dx + dz * dz;
+    if (d2 < PLAYER_R * PLAYER_R) {
+      if (d2 > 1e-6) {
+        const dd = Math.sqrt(d2);
+        pos.x = px + (dx / dd) * PLAYER_R;
+        pos.z = pz + (dz / dd) * PLAYER_R;
+      } else {
+        const dl = pos.x - minx, dr = maxx - pos.x, dt = pos.z - minz, db = maxz - pos.z;
+        const m = Math.min(dl, dr, dt, db);
+        if (m === dl) pos.x = minx - PLAYER_R;
+        else if (m === dr) pos.x = maxx + PLAYER_R;
+        else if (m === dt) pos.z = minz - PLAYER_R;
+        else pos.z = maxz + PLAYER_R;
+      }
+    }
+  }
+}
+
+function collide(pos, y) {
+  for (const w of WALLS) {
+    const top = w.h || 1;
+    if (w.kind === 'prop') {
+      // 站到顶上之后不再挡路；正在跳上来（快到顶面）也不再横向推开
+      if (y >= top - 0.1) continue;
+      if (vy > -0.6 && y >= top - CLIMB_ASSIST) continue;
+      const [fw, fd] = footprint(w.w, w.d, w.rot);
+      pushOutBox(pos, fw, fd, w.x, w.z);
+    } else {
+      pushOutBox(pos, w.w, w.d, w.x, w.z);
+    }
+  }
+  for (const c of stateRef.cabinets || []) {
+    if (y >= 1.8) continue;
+    if (vy > -0.6 && y >= 1.9 - CLIMB_ASSIST) continue;
+    pushOutBox(pos, 1.1, 0.62, c.x, c.z);
+  }
+  // 诱饵也是实体，不能穿过去
+  for (const dcy of stateRef.decoys || []) {
+    if (y >= 1.8) continue;
+    if (vy > -0.6 && y >= 1.9 - CLIMB_ASSIST) continue;
+    pushOutBox(pos, 1.1, 0.62, dcy[0], dcy[1]);
+  }
+  const A = (MAP && MAP.arena) || ARENA_DEFAULT;
+  pos.x = Math.max(-A + 0.55, Math.min(A - 0.55, pos.x));
+  pos.z = Math.max(-A + 0.55, Math.min(A - 0.55, pos.z));
+}
+
+let lastSend = 0;
+const GRAVITY = 11.5;
+const JUMP_V = 5.9;   // 跳跃最高约 1.5 米
+let vy = 0;
+let jumpHeld = false;
+let myPounceAt = 0;
+
+function updateMovement(dt) {
+  if (myId === null) return;
+
+  // 准备阶段调查员被锁定，不能提前冲出去
+  const locked = stateRef.phase === 'prepare' && me.team === 'hunt';
+  const canMove = me.alive && !spectating && !locked;
+  const speed = me.rage ? SPEED_RAGE : SPEED;
+
+  // 跳跃（空格）：可以跳上箱子、柜子；跳上去还能再跳一次
+  const ground = groundAt(me.pos.x, me.pos.z, me.pos.y);
+  if (canMove || spectating) {
+    if (keys['Space'] && !jumpHeld && me.pos.y <= ground + 0.06) { vy = JUMP_V; jumpHeld = true; }
+    if (me.pos.y > ground || vy > 0) {
+      vy -= GRAVITY * dt;
+      me.pos.y += vy * dt;
+      if (me.pos.y <= ground) { me.pos.y = ground; vy = 0; }
+    } else if (me.pos.y < ground) {
+      me.pos.y = ground; vy = 0;
+    }
+  }
+
+  // 跳到离顶面 0.55 米以内就自动抓住边缘站上去（道具/柜子都能上）
+  if (me.pos.y > 0.02) {
+    for (const [tx, tz, hw, hd, top] of standableTops()) {
+      if (me.pos.y < top && top - me.pos.y <= CLIMB_ASSIST &&
+          Math.abs(me.pos.x - tx) <= hw + PLAYER_R * 0.6 &&
+          Math.abs(me.pos.z - tz) <= hd + PLAYER_R * 0.6) {
+        me.pos.y = top; vy = 0; break;
+      }
+    }
+  }
+
+  if (canMove || spectating) {
+    const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+    const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+    const mv = new THREE.Vector3();
+    if (keys['KeyW']) mv.add(fwd);
+    if (keys['KeyS']) mv.sub(fwd);
+    if (keys['KeyA']) mv.sub(right);
+    if (keys['KeyD']) mv.add(right);
+    if (mv.lengthSq() > 0) {
+      mv.normalize().multiplyScalar(speed * dt);
+      me.pos.add(mv);
+      if (canMove) collide(me.pos, me.pos.y);
+      else {
+        me.pos.x = Math.max(-30, Math.min(30, me.pos.x));
+        me.pos.z = Math.max(-30, Math.min(30, me.pos.z));
+      }
+    }
+  }
+
+  const now = performance.now();
+  if (now - lastSend > 60) {
+    lastSend = now;
+    net.send({ t: 'move', p: [+me.pos.x.toFixed(2), +me.pos.z.toFixed(2)], y: +me.pos.y.toFixed(2), ry: +yaw.toFixed(2) });
+  }
+}
+
+// 柜子提示（靠近时底部提示按 G）
+let lastOpen = 0;
+function updateCabinetHint() {
+  const hint = document.getElementById('open-hint');
+  if (!hint) return;
+  const c = me.team === 'hunt' && me.alive ? nearestCabinet() : null;
+  hint.style.display = c ? 'block' : 'none';
+  if (c) hint.textContent = '按 G 打开柜子';
+}
+
+// ==================================================
+// 渲染循环
+// ==================================================
+const clock = new THREE.Clock();
+const tmp = new THREE.Vector3();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = performance.now();
+
+  updateMovement(dt);
+  updateCabinetHint();
+
+  // 冷却本地平滑递减（服务端每帧会校正）
+  if (me.tc > 0) me.tc = Math.max(0, me.tc - dt * 1000);
+  if (me.dc > 0) me.dc = Math.max(0, me.dc - dt * 1000);
+
+  // 相机
+  // 相机：躲藏者用第三人称（能看见自己的伪装形态），调查员保持第一人称
+  const hideView = me.team === 'hide' && me.alive && !spectating && myId !== null;
+  if (hideView) {
+    const bx = Math.sin(yaw), bz = Math.cos(yaw);
+    let dist = 3.7;
+    while (dist > 0.9 && blockedAt(me.pos.x + bx * dist, me.pos.z + bz * dist, 0.35)) dist -= 0.22;
+    const camY = 1.7 + me.pos.y + dist * 0.2 + Math.sin(pitch) * 0.6;
+    let shakeX = 0, shakeY = 0;
+    const pt = myPounceAt ? (t - myPounceAt) / 600 : 1;
+    if (pt >= 0 && pt < 1) {
+      const s = 0.06 * Math.sin(pt * Math.PI * 6) * (1 - pt);
+      shakeX = s; shakeY = -s * 0.8;
+    }
+    camera.position.set(me.pos.x + bx * dist + shakeX, camY + shakeY, me.pos.z + bz * dist);
+    camera.lookAt(me.pos.x - Math.sin(yaw) * 1.6, 1.0 + me.pos.y, me.pos.z - Math.cos(yaw) * 1.6);
+  } else {
+    camera.position.set(me.pos.x, 1.65 + me.pos.y, me.pos.z);
+    camera.rotation.y = yaw;
+    camera.rotation.x = pitch;
+  }
+  updateSelfRig(t);
+
+  ensureGun();
+
+  // 远程插值
+  for (const r of remoteMap.values()) {
+    r.cur.lerp(r.target, Math.min(1, dt * 12));
+    r.group.position.copy(r.cur);
+    r.group.rotation.y = r.ry + Math.PI;  // 同上：模型正面 +Z
+    // 别人扑咬时的压扁动作
+    const pt = r.pounceAt ? (t - r.pounceAt) / 600 : 1;
+    if (pt >= 0 && pt < 1) {
+      const s = Math.sin(pt * Math.PI);
+      r.group.scale.set(1 + 0.15 * s, 1 - 0.3 * s, 1 + 0.35 * s);
+    } else if (r.group.scale.x !== 1) {
+      r.group.scale.set(1, 1, 1);
+    }
+  }
+
+  // 诱饵轻微摇摆
+  decoyGroup.children.forEach((c, i) => {
+    c.position.y = Math.sin(t * 0.002 + i) * 0.02;
+  });
+
+  // 道具旋转
+  for (const mesh of itemMeshes.values()) {
+    mesh.rotation.y += dt * 1.6;
+    mesh.position.y = 0.75 + Math.sin(t * 0.0022) * 0.09;
+  }
+
+  // 枪口闪光衰减
+  if (flashMesh) {
+    flashMesh.intensity = t < flashUntil ? 22 : 0;
+  }
+
+  // 探测标记
+  updateRings(t);
+
+  renderer.render(scene, camera);
+}
+
+function updateRings(t) {
+  while (ringGroup.children.length) ringGroup.remove(ringGroup.children[0]);
+  if (t > detectorUntil) return;
+  for (const p of stateRef.players) {
+    if (p.team !== 'hide' || p.a !== 1) continue;
+    const ring = makeRingEntity();
+    ring.position.set(p.x, 0.06, p.z);
+    ringGroup.add(ring);
+  }
+}
+
+animate();
+
+// 防止某些浏览器聚焦丢失
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+
+// 调试钩子（方便排查模型/渲染问题）
+window.__tp = (x, z, y2) => {
+  me.pos.x = x; me.pos.z = z;
+  if (typeof y2 === 'number') { yaw = y2; }
+};
+window.__sety = (v) => { me.pos.y = v; vy = 0; };
+window.__g = (x, z, y) => groundAt(x, z, y);
+window.__dbg = () => ({
+  cabs: cabMeshes.size,
+  cabList: (stateRef.cabinets || []).length,
+  decoys: decoyGroup.children.length,
+  decoyNames: [...decoyGroup.children].map(m => m.name),
+  phase: stateRef.phase,
+  y: +me.pos.y.toFixed(2),
+  ground: +groundAt(me.pos.x, me.pos.z, me.pos.y).toFixed(2),
+  hint: getComputedStyle(document.getElementById('open-hint')).display
+});
+</script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
