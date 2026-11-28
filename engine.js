@@ -356,16 +356,22 @@ function blocked(ox, oy, oz, dx, dy, dz, maxT) {
 // maxHy = 命中高度上限（相对地面）。站在物品上开枪时，上限随脚下高度一起抬高
 function rayPlayer(ox, oy, oz, dx, dy, dz, p, radius, maxHy) {
   const cap = (typeof maxHy === 'number' ? maxHy : 1.4);
-  // 在 XZ 平面与半径 radius 的圆判交，同时 y 不超过上限
+  // 射高上限看的是"目标自己站多高"（脚下高度），不是子弹射出时的高度
+  const ty = (typeof p.y === 'number' ? p.y : 0);
+  if (ty > cap) return null;                 // 目标站得太高，超出射高上限，打不到
+  const hlen = Math.hypot(dx, dz);
+  if (hlen < 1e-6) return null;              // 完全垂直看，没有水平方向
+  const hx = dx / hlen, hz = dz / hlen;      // 水平方向单位向量
   const px = p.x - ox, pz = p.z - oz;
-  const proj = px * dx + pz * dz;
+  const proj = px * hx + pz * hz;            // 水平面上的距离
   if (proj <= 0) return null;
   const distSq = px * px + pz * pz - proj * proj;
   if (distSq > radius * radius) return null;
-  const t = proj;
-  const hy = oy + dy * t;
-  if (hy < -0.3 || hy > cap) return null;   // 默认最多打到 1.4 米高
-  return t;
+  const t = proj / hlen;                     // 沿射线的真实距离
+  const hy = oy + dy * t;                    // 子弹飞到那里时的高度
+  // 子弹高度要落在目标身体范围（脚底到头顶 1.75 米）内
+  if (hy < ty - 0.35 || hy > ty + 1.75) return null;
+  return proj;
 }
 
 // ---------- 人机（AI 补位） ----------
