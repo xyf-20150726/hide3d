@@ -8,6 +8,7 @@
 const ARENA = 20;              // 场地半径（正方形半边长，40×40 米）
 const PREPARE_TIME = 15;   // 准备阶段秒数
 const PLAY_TIME = 150;         // 对局秒数
+const RAGE_TIME = 60;          // 狂暴阶段秒数（撑过去躲藏者赢）
 const TICK = 50;               // 20Hz
 const MAX_PER_TEAM = 4;        // 每队上限
 const ENERGY_NEAR = 5.5;       // 多近开始攒能量
@@ -15,7 +16,7 @@ const ENERGY_RATE = 0.55;      // 每 tick 增长（约 9 秒充满）
 const TAUNT_NEAR = 20;         // 20 米内有调查员才能嘲讽
 const TAUNT_ENERGY = 12;       // 嘲讽一次加的能量
 const POUNCE_RANGE = 3.4;      // 扑咬判定半径
-const SHOOT_RANGE = 26;        // 射击最大距离
+const SHOOT_RANGE = 999;       // 子弹没有距离限制（只有墙会挡住）
 const ITEM_RESPAWN = 20000;    // 道具重生毫秒
 const CABINET_ITEM_CHANCE = 0.65; // 每个柜子里有东西的概率
 const OPEN_RANGE = 2.2;        // 离柜子多近能打开
@@ -354,7 +355,7 @@ function blocked(ox, oy, oz, dx, dy, dz, maxT) {
 // 射线与玩家命中（近似为竖直圆柱）
 // maxHy = 命中高度上限（相对地面）。站在物品上开枪时，上限随脚下高度一起抬高
 function rayPlayer(ox, oy, oz, dx, dy, dz, p, radius, maxHy) {
-  const cap = (typeof maxHy === 'number' ? maxHy : 1.6);
+  const cap = (typeof maxHy === 'number' ? maxHy : 1.4);
   // 在 XZ 平面与半径 radius 的圆判交，同时 y 不超过上限
   const px = p.x - ox, pz = p.z - oz;
   const proj = px * dx + pz * dz;
@@ -363,7 +364,7 @@ function rayPlayer(ox, oy, oz, dx, dy, dz, p, radius, maxHy) {
   if (distSq > radius * radius) return null;
   const t = proj;
   const hy = oy + dy * t;
-  if (hy < -0.3 || hy > cap) return null;   // 默认最多打到 1.6 米高
+  if (hy < -0.3 || hy > cap) return null;   // 默认最多打到 1.4 米高
   return t;
 }
 
@@ -874,7 +875,7 @@ function doShoot(room, shooter, o, d) {
   const wallT = blocked(o[0], o[1], o[2], dx, dy, dz, SHOOT_RANGE);
 
   // 命中玩家（站在物品上开枪，高度上限跟着抬高）
-  const shootCap = 1.6 + Math.max(0, shooter.y || 0);
+  const shootCap = 1.4 + Math.max(0, shooter.y || 0);
   let best = null, bestT = SHOOT_RANGE;
   for (const q of room.players.values()) {
     if (q.team !== 'hide' || !q.alive || q === shooter) continue;
@@ -1026,11 +1027,11 @@ function tick(room) {
       }
     }
 
-    if (room.timer <= 0 && room.phase !== 'rage') {
+    if (room.timer <= 0 && room.phase !== 'rage' && room.phase !== 'end') {
       const hideAlive = [...room.players.values()].filter(p => p.team === 'hide' && p.alive).length;
       if (hideAlive > 0) {
         room.phase = 'rage';
-        room.timer = PLAY_TIME; // 给狂暴阶段一段时间
+        room.timer = RAGE_TIME; // 给狂暴阶段一段时间
         for (const p of room.players.values()) {
           if (p.team === 'hide' && p.alive) {
             p.rage = true;
@@ -1042,6 +1043,11 @@ function tick(room) {
       } else {
         endGame(room, 'hunt', '所有异常生物都已被淘汰！');
       }
+    }
+
+    // 狂暴时间结束：躲藏者撑到了最后
+    if (room.phase === 'rage' && room.timer <= 0) {
+      endGame(room, 'hide', '狂暴时间结束，异常生物撑到了最后！');
     }
 
     // 能量累积
@@ -1262,17 +1268,19 @@ wss.on('connection', (ws) => {
         break;
       }
       case 'searchDecoy': {
-        // 调查员按 G 搜索：如果最近的是诱饵，识破后柜子消失
+        // 诱饵就是假柜子：调查员按 G 打开它，跟真柜子一样只看到"空的"，开完柜子消失
         if (me.team !== 'hunt' || !me.alive) return;
+        const now = Date.now();
+        if (me.cabAt && now - me.cabAt < 500) return;
         let best = null, bd = OPEN_RANGE + 0.8;
         for (const dc of room.decoys) {
           const dd = Math.hypot(dc.x - me.x, dc.z - me.z);
           if (dd < bd) { bd = dd; best = dc; }
         }
         if (!best) return send(ws, { t: 'event', kind: 'info', text: '附近没有柜子' });
+        me.cabAt = now;
         room.decoys = room.decoys.filter(x => x !== best);
-        send(ws, { t: 'event', kind: 'warn', text: '假柜子！是诱饵，砸开后柜子消失了' });
-        event(room, `${me.name} 识破了一个诱饵`, 'info');
+        send(ws, { t: 'event', kind: 'info', text: '柜子里是空的…' });
         break;
       }
       case 'shoot': {

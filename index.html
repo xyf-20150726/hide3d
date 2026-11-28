@@ -1963,9 +1963,15 @@ let lastOpen = 0;
 function updateCabinetHint() {
   const hint = document.getElementById('open-hint');
   if (!hint) return;
-  const c = me.team === 'hunt' && me.alive ? nearestCabinet() : null;
-  hint.style.display = c ? 'block' : 'none';
-  if (c) hint.textContent = '按 G 打开柜子';
+  let near = false;
+  if (me.team === 'hunt' && me.alive) {
+    // 真柜子和假柜子（诱饵）都算，靠近就能按 G 打开
+    const c = nearestCabinet();
+    const dcy = nearestDecoy();
+    near = !!(c || dcy);
+  }
+  hint.style.display = near ? 'block' : 'none';
+  if (near) hint.textContent = '按 G 打开柜子';
 }
 
 // ==================================================
